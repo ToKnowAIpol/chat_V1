@@ -162,21 +162,30 @@
         }
       });
 
-      function addMessageToChat(sender, message, type) {
-        const messageElem = document.createElement('div');
-        messageElem.className = `message ${type}-message`;
-        const displayName = sender === 'client' ? 'User' :
-                          sender === 'admin' ? 'Support' : 'AI';
-        messageElem.textContent = `${displayName}: ${message}`;
-        chatDiv.appendChild(messageElem);
-        chatDiv.scrollTop = chatDiv.scrollHeight;
-      }
+function addMessageToChat(sender, message, type, createdAt) {
+  // Generate a unique message ID that includes both timestamp and sender
+  const messageId = createdAt ? `${createdAt}-${sender}` : `${Date.now()}-${sender}-${Math.random().toString(36).substring(2, 8)}`;
+  
+  // Avoid adding duplicate messages based on the unique message ID
+  if (document.querySelector(`[data-id="${messageId}"]`)) {
+    return;
+  }
+  
+  const messageElem = document.createElement('div');
+  messageElem.className = `message ${type}-message`;
+  messageElem.setAttribute('data-id', messageId);
+  const displayName = sender === 'client' ? 'User' :
+                      sender === 'admin' ? 'Support' : 'AI';
+  messageElem.textContent = `${displayName}: ${message}`;
+  chatDiv.appendChild(messageElem);
+  chatDiv.scrollTop = chatDiv.scrollHeight;
+}
 
-      socket.on('new_message', (msg) => {
+socket.on('new_message', (msg) => {
         console.log("Received message:", msg);
         const messageType = msg.sender === 'ai' ? 'ai' : 
                           msg.sender === 'admin' ? 'admin' : 'client';
-        addMessageToChat(msg.sender, msg.message, messageType);
+        addMessageToChat(msg.sender, msg.message, messageType, msg.created_at);
       });
 
       async function sendMessage() {
@@ -219,10 +228,10 @@
         try {
           const response = await fetch(`/api/chat/${chatId}/messages`);
           const messages = await response.json();
-          messages.forEach(msg => {
+messages.forEach(msg => {
             const messageType = msg.sender === 'ai' ? 'ai' : 
                               msg.sender === 'admin' ? 'admin' : 'client';
-            addMessageToChat(msg.sender, msg.message, messageType);
+            addMessageToChat(msg.sender, msg.message, messageType, msg.created_at);
           });
         } catch (error) {
           console.error("Error loading chat history:", error);

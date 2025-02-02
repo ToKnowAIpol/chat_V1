@@ -81,7 +81,6 @@
     <div class="input-container">
       <input type="text" id="messageInput" placeholder="Type your message..."/>
       <button id="sendButton">Send</button>
-      <button id="aiButton">Ask AI</button>
     </div>
 
     <script>
@@ -111,55 +110,46 @@
         addMessageToChat(msg.sender, msg.message, messageType);
       });
 
-      async function sendMessage(isAi = false) {
+      async function sendMessage() {
         const messageText = messageInput.value.trim();
         if (messageText === '') return;
 
-        // Disable buttons and show loading state
-        aiButton.disabled = true;
         sendButton.disabled = true;
 
         try {
-          if (isAi) {
-            addMessageToChat('client', messageText, 'user');
-            await fetch(`/api/chat/${chatId}/message/ai`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ message: messageText })
-            });
-          } else {
-            // Regular message
-            const response = await fetch(`/api/chat/${chatId}/message`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ message: messageText, sender: 'client' })
-            });
-            if (!response.ok) throw new Error('Failed to send message');
-            const data = await response.json();
-            addMessageToChat('client', messageText, 'user');
-          }
+          // First send the user's message
+          const response = await fetch(`/api/chat/${chatId}/message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: messageText, sender: 'client' })
+          });
+          
+          if (!response.ok) throw new Error('Failed to send message');
+          
+          // Then request AI response
+          await fetch(`/api/chat/${chatId}/message/ai`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: messageText })
+          });
+          
           messageInput.value = '';
         } catch (error) {
           console.error("Error sending message:", error);
-          alert("Wystąpił błąd podczas wysyłania wiadomości");
+          alert("Error sending message");
         } finally {
-          // Re-enable buttons
-          aiButton.disabled = false;
           sendButton.disabled = false;
         }
       }
 
-      // Handle AI button click
-      aiButton.addEventListener('click', () => sendMessage(true));
-
-      // Handle regular send button click
-      sendButton.addEventListener('click', () => sendMessage(false));
+      // Handle send button click
+      sendButton.addEventListener('click', sendMessage);
 
       // Handle Enter key
       messageInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          sendMessage(false);
+          sendMessage();
         }
       });
 

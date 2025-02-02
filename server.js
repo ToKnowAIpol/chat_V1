@@ -56,7 +56,7 @@ app.post('/api/chat/:chatId/message', async (req, res) => {
   };
   
   messages.get(chatId).push(newMessage);
-  io.to(chatId).emit('new_message', newMessage);
+  io.emit('new_message', newMessage);
   res.status(201).json(newMessage);
 });
 
@@ -103,7 +103,7 @@ app.post('/api/chat/:chatId/message/ai', async (req, res) => {
     };
     
     messages.get(chatId).push(aiMessage);
-    io.to(chatId).emit('new_message', aiMessage);
+    io.emit('new_message', aiMessage);
     res.status(201).json(aiMessage);
   } catch (err) {
     console.error(err);
