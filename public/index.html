@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Chat App</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 20px auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      #chat {
+        height: 500px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        padding: 20px;
+        margin-bottom: 20px;
+        background-color: white;
+        border-radius: 8px;
+      }
+      .message {
+        margin: 10px 0;
+        padding: 10px;
+        border-radius: 8px;
+        max-width: 70%;
+      }
+      .user-message {
+        background-color: #007bff;
+        color: white;
+        margin-left: auto;
+      }
+      .ai-message {
+        background-color: #e9ecef;
+        color: black;
+      }
+      .input-container {
+        display: flex;
+        gap: 10px;
+      }
+      #messageInput {
+        flex-grow: 1;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 16px;
+      }
+      button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+      }
+      #sendButton {
+        background-color: #28a745;
+        color: white;
+      }
+      #aiButton {
+        background-color: #007bff;
+        color: white;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .loading {
+        display: inline-block;
+        margin-left: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="chat"></div>
+    <div class="input-container">
+      <input type="text" id="messageInput" placeholder="Wpisz wiadomość"/>
+      <button id="sendButton">Wyślij</button>
+      <button id="aiButton">Zapytaj AI</button>
+    </div>
+
+    <script>
+      const socket = io();
+      const messageInput = document.getElementById('messageInput');
+      const chatDiv = document.getElementById('chat');
+      const aiButton = document.getElementById('aiButton');
+      const sendButton = document.getElementById('sendButton');
+      const chatId = "test-chat";
+
+      socket.emit('join_chat', chatId);
+
+      function addMessageToChat(sender, message, isAi = false) {
+        const messageElem = document.createElement('div');
+        messageElem.className = `message ${isAi ? 'ai-message' : 'user-message'}`;
+        messageElem.textContent = message;
+        chatDiv.appendChild(messageElem);
+        chatDiv.scrollTop = chatDiv.scrollHeight;
+      }
+
+      socket.on('new_message', (msg) => {
+        console.log("Otrzymana wiadomość:", msg);
+        addMessageToChat(msg.sender, msg.message, msg.sender === 'ai');
+      });
+
+      async function sendMessage(isAi = false) {
+        const messageText = messageInput.value.trim();
+        if (messageText === '') return;
+
+        // Disable buttons and show loading state
+        aiButton.disabled = true;
+        sendButton.disabled = true;
+
+        try {
+          if (isAi) {
+            addMessageToChat('user', messageText);
+            await fetch(`/api/chat/${chatId}/message/ai`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: messageText })
+            });
+          } else {
+            // Regular message
+            const response = await fetch(`/api/chat/${chatId}/message`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: messageText, sender: 'client' })
+            });
+            if (!response.ok) throw new Error('Failed to send message');
+            const data = await response.json();
+            addMessageToChat('user', messageText);
+          }
+          messageInput.value = '';
+        } catch (error) {
+          console.error("Error sending message:", error);
+          alert("Wystąpił błąd podczas wysyłania wiadomości");
+        } finally {
+          // Re-enable buttons
+          aiButton.disabled = false;
+          sendButton.disabled = false;
+        }
+      }
+
+      // Handle AI button click
+      aiButton.addEventListener('click', () => sendMessage(true));
+
+      // Handle regular send button click
+      sendButton.addEventListener('click', () => sendMessage(false));
+
+      // Handle Enter key
+      messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage(false);
+        }
+      });
+
+      // Load chat history on page load
+      async function loadChatHistory() {
+        try {
+          const response = await fetch(`/api/chat/${chatId}/messages`);
+          const messages = await response.json();
+          messages.forEach(msg => {
+            addMessageToChat(msg.sender, msg.message, msg.sender === 'ai');
+          });
+        } catch (error) {
+          console.error("Error loading chat history:", error);
+        }
+      }
+
+      loadChatHistory();
+    </script>
+  </body>
+</html>
