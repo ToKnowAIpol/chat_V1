@@ -8,15 +8,35 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Store messages in memory
+// Store messages and AI toggle state in memory
 const messages = new Map();
+let aiEnabled = true;
 
-// Middleware do obsługi JSON oraz serwowania plików statycznych
+// Middleware for JSON and static files
 app.use(express.json());
 app.use(express.static(__dirname + '/public'));
 
+// Routes for customer and admin pages
 app.get('/', (req, res) => {
-  res.send('Chat app running');
+  res.sendFile(__dirname + '/public/index.html');
+});
+
+app.get('/admin', (req, res) => {
+  res.sendFile(__dirname + '/public/admin.html');
+});
+
+// Admin API endpoints
+app.get('/api/admin/ai-toggle', (req, res) => {
+  res.json({ enabled: aiEnabled });
+});
+
+app.post('/api/admin/ai-toggle', (req, res) => {
+  const { enabled } = req.body;
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'Invalid toggle state' });
+  }
+  aiEnabled = enabled;
+  res.json({ enabled: aiEnabled });
 });
 
 // Endpoint do wysyłania wiadomości
@@ -40,8 +60,12 @@ app.post('/api/chat/:chatId/message', async (req, res) => {
   res.status(201).json(newMessage);
 });
 
-// Endpoint wywołujący AI
+// AI message endpoint
 app.post('/api/chat/:chatId/message/ai', async (req, res) => {
+  if (!aiEnabled) {
+    return res.status(403).json({ error: 'AI responses are currently disabled' });
+  }
+
   const { chatId } = req.params;
   const { message } = req.body;
 

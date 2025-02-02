@@ -2,7 +2,7 @@
 <html lang="pl">
   <head>
     <meta charset="UTF-8" />
-    <title>Chat App</title>
+    <title>Admin Chat</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
       body {
@@ -35,6 +35,11 @@
       .admin-message {
         background-color: #28a745;
         color: white;
+        margin-left: auto;
+      }
+      .client-message {
+        background-color: #e9ecef;
+        color: black;
       }
       .ai-message {
         background-color: #6c757d;
@@ -62,9 +67,50 @@
         background-color: #28a745;
         color: white;
       }
-      #aiButton {
-        background-color: #007bff;
-        color: white;
+      .toggle-container {
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 60px;
+        height: 34px;
+      }
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 34px;
+      }
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 26px;
+        width: 26px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+      }
+      input:checked + .slider {
+        background-color: #2196F3;
+      }
+      input:checked + .slider:before {
+        transform: translateX(26px);
       }
       button:disabled {
         opacity: 0.6;
@@ -77,89 +123,94 @@
     </style>
   </head>
   <body>
+    <div class="toggle-container">
+      <label class="toggle-switch">
+        <input type="checkbox" id="aiToggle" checked>
+        <span class="slider"></span>
+      </label>
+      <span>AI Responses</span>
+    </div>
     <div id="chat"></div>
     <div class="input-container">
-      <input type="text" id="messageInput" placeholder="Type your message..."/>
+      <input type="text" id="messageInput" placeholder="Type your response..."/>
       <button id="sendButton">Send</button>
-      <button id="aiButton">Ask AI</button>
     </div>
 
     <script>
       const socket = io();
       const messageInput = document.getElementById('messageInput');
       const chatDiv = document.getElementById('chat');
-      const aiButton = document.getElementById('aiButton');
       const sendButton = document.getElementById('sendButton');
+      const aiToggle = document.getElementById('aiToggle');
       const chatId = "test-chat";
 
       socket.emit('join_chat', chatId);
 
+      // Handle AI toggle
+      aiToggle.addEventListener('change', async () => {
+        try {
+          await fetch('/api/admin/ai-toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: aiToggle.checked })
+          });
+        } catch (error) {
+          console.error("Error toggling AI:", error);
+          alert("Failed to toggle AI responses");
+          // Revert toggle if request failed
+          aiToggle.checked = !aiToggle.checked;
+        }
+      });
+
       function addMessageToChat(sender, message, type) {
         const messageElem = document.createElement('div');
         messageElem.className = `message ${type}-message`;
-        const prefix = sender === 'client' ? 'You' : 
-                      sender === 'admin' ? 'Support' : 'AI';
-        messageElem.textContent = `${prefix}: ${message}`;
+        const displayName = sender === 'client' ? 'User' :
+                          sender === 'admin' ? 'Support' : 'AI';
+        messageElem.textContent = `${displayName}: ${message}`;
         chatDiv.appendChild(messageElem);
         chatDiv.scrollTop = chatDiv.scrollHeight;
       }
 
       socket.on('new_message', (msg) => {
-        console.log("Otrzymana wiadomość:", msg);
+        console.log("Received message:", msg);
         const messageType = msg.sender === 'ai' ? 'ai' : 
-                          msg.sender === 'admin' ? 'admin' : 'user';
+                          msg.sender === 'admin' ? 'admin' : 'client';
         addMessageToChat(msg.sender, msg.message, messageType);
       });
 
-      async function sendMessage(isAi = false) {
+      async function sendMessage() {
         const messageText = messageInput.value.trim();
         if (messageText === '') return;
 
-        // Disable buttons and show loading state
-        aiButton.disabled = true;
         sendButton.disabled = true;
 
         try {
-          if (isAi) {
-            addMessageToChat('client', messageText, 'user');
-            await fetch(`/api/chat/${chatId}/message/ai`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ message: messageText })
-            });
-          } else {
-            // Regular message
-            const response = await fetch(`/api/chat/${chatId}/message`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ message: messageText, sender: 'client' })
-            });
-            if (!response.ok) throw new Error('Failed to send message');
-            const data = await response.json();
-            addMessageToChat('client', messageText, 'user');
-          }
+          const response = await fetch(`/api/chat/${chatId}/message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: messageText, sender: 'admin' })
+          });
+          
+          if (!response.ok) throw new Error('Failed to send message');
+          
           messageInput.value = '';
         } catch (error) {
           console.error("Error sending message:", error);
-          alert("Wystąpił błąd podczas wysyłania wiadomości");
+          alert("Error sending message");
         } finally {
-          // Re-enable buttons
-          aiButton.disabled = false;
           sendButton.disabled = false;
         }
       }
 
-      // Handle AI button click
-      aiButton.addEventListener('click', () => sendMessage(true));
-
-      // Handle regular send button click
-      sendButton.addEventListener('click', () => sendMessage(false));
+      // Handle send button click
+      sendButton.addEventListener('click', sendMessage);
 
       // Handle Enter key
       messageInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          sendMessage(false);
+          sendMessage();
         }
       });
 
@@ -170,7 +221,7 @@
           const messages = await response.json();
           messages.forEach(msg => {
             const messageType = msg.sender === 'ai' ? 'ai' : 
-                              msg.sender === 'admin' ? 'admin' : 'user';
+                              msg.sender === 'admin' ? 'admin' : 'client';
             addMessageToChat(msg.sender, msg.message, messageType);
           });
         } catch (error) {
@@ -178,7 +229,19 @@
         }
       }
 
+      // Load initial AI toggle state
+      async function loadAiToggleState() {
+        try {
+          const response = await fetch('/api/admin/ai-toggle');
+          const { enabled } = await response.json();
+          aiToggle.checked = enabled;
+        } catch (error) {
+          console.error("Error loading AI toggle state:", error);
+        }
+      }
+
       loadChatHistory();
+      loadAiToggleState();
     </script>
   </body>
 </html>
